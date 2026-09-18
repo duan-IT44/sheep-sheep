@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>管理员 - 任务分配管理系统</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/element-plus"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <style>
+        body { margin: 0; background: #F5F7FA; font-family: "Microsoft YaHei", Arial, sans-serif; }
+        .header {
+            background: #1F5FBF; color: white;
+            padding: 18px 30px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .header h2 { margin: 0; }
+        .container { padding: 20px 30px; }
+        .stat-row { display: flex; gap: 15px; margin-bottom: 20px; }
+        .stat-card {
+            flex: 1; background: #fff; padding: 20px;
+            border-radius: 8px; border: 1px solid #E0E0E0;
+        }
+        .stat-card .title { color: #888; font-size: 13px; }
+        .stat-card .num { font-size: 28px; font-weight: bold; color: #1F5FBF; margin-top: 8px; }
+        .stat-card.done .num { color: #4CAF50; }
+        .stat-card.doing .num { color: #2196F3; }
+        .stat-card.pending .num { color: #FF9800; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="header">
+            <h2>任务分配管理系统 - 管理员</h2>
+            <el-button size="small" @click="logout">退出登录</el-button>
+        </div>
+
+        <div class="container">
+            <el-tabs v-model="activeTab" type="border-card">
+
+                <!-- ========== 标签页1：任务管理 ========== -->
+                <el-tab-pane label="任务管理" name="tasks">
+                    <div class="stat-row">
+                        <div class="stat-card">
+                            <div class="title">任务总数</div>
+                            <div class="num">{{ stat.total }}</div>
+                        </div>
+                        <div class="stat-card pending">
+                            <div class="title">待开始</div>
+                            <div class="num">{{ stat.pending }}</div>
+                        </div>
+                        <div class="stat-card doing">
+                            <div class="title">进行中</div>
+                            <div class="num">{{ stat.processing }}</div>
+                        </div>
+                        <div class="stat-card done">
+                            <div class="title">已完成</div>
+                            <div class="num">{{ stat.finished }}</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom:15px;">
+                        <el-button type="primary" @click="openAddDialog">+ 新建任务</el-button>
+                        <el-button @click="loadTasks">刷新</el-button>
+                    </div>
+
+                    <el-table :data="tasks" border style="width:100%">
+                        <el-table-column prop="task_id" label="编号" width="70"></el-table-column>
+                        <el-table-column prop="task_title" label="任务标题"></el-table-column>
+                        <el-table-column prop="task_description" label="任务描述"></el-table-column>
+                        <el-table-column label="负责人" width="120">
+                            <template #default="scope">
+                                {{ scope.row.assignee_name || '-' }}
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="deadline" label="截止日期" width="130"></el-table-column>
+                        <el-table-column label="状态" width="130">
+                            <template #default="scope">
+                                <el-tag :type="statusType(scope.row.task_status)">
+                                    {{ statusText(scope.row.task_status) }}
+                                </el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="220">
+                            <template #default="scope">
+                                <el-button size="small" @click="openAssignDialog(scope.row)">分配</el-button>
+                                <el-button size="small" type="danger" @click="deleteTask(scope.row)">删除</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </el-tab-pane>
+
+                <!-- ========== 标签页2：员工管理 ========== -->
+                <el-tab-pane label="员工管理" name="users">
+                    <div style="margin-bottom:15px;">
+                        <el-button type="primary" @click="openUserDialog">+ 添加员工</el-button>
+                        <el-button @click="loadUsers">刷新</el-button>
+                    </div>
+
+                    <el-table :data="users" border style="width:100%">
+                        <el-table-column prop="user_id" label="编号" width="80"></el-table-column>
+                        <el-table-column prop="username" label="用户名" width="150"></el-table-column>
+                        <el-table-column prop="full_name" label="姓名" width="150"></el-table-column>
+                        <el-table-column label="角色" width="130">
+                            <template #default="scope">
+                                <el-tag :type="scope.row.role === 'admin' ? 'danger' : 'success'">
+                                    {{ scope.row.role === 'admin' ? '管理员' : '开发人员' }}
+                                </el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="150">
+                            <template #default="scope">
+                                <el-button v-if="scope.row.username !== 'admin'"
+                                           size="small" type="danger"
+                                           @click="deleteUser(scope.row)">删除</el-button>
+                                <span v-else style="color:#999;font-size:12px;">不可删除</span>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </el-tab-pane>
+
+            </el-tabs>
+        </div>
+
+        <!-- 新建任务弹窗 -->
+        <el-dialog v-model="addDialogVisible" title="新建任务" width="500px">
+            <el-form :model="newTask" label-width="100px">
+                <el-form-item label="任务标题">
+                    <el-input v-model="newTask.taskTitle"></el-input>
+                </el-form-item>
+                <el-form-item label="任务描述">
+                    <el-input v-model="newTask.taskDescription" type="textarea"></el-input>
+                </el-form-item>
+                <el-form-item label="截止日期">
+                    <el-input v-model="newTask.deadline" placeholder="格式：YYYY-MM-DD"></el-input>
+                </el-form-item>
+                <el-form-item label="负责人">
+                    <el-select v-model="newTask.assignedUserId" placeholder="请选择负责人" style="width:100%">
+                        <el-option v-for="d in developers" :key="d.user_id"
+                                   :label="d.full_name" :value="d.user_id"></el-option>
+                    </el-select>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="addDialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="submitAdd">保存</el-button>
+            </template>
+        </el-dialog>
+
+        <!-- 分配任务弹窗 -->
+        <el-dialog v-model="assignDialogVisible" title="分配任务" width="400px">
+            <el-form label-width="100px">
+                <el-form-item label="任务">
+                    <span>{{ currentTask.task_title }}</span>
+                </el-form-item>
+                <el-form-item label="负责人">
+                    <el-select v-model="selectedUserId" placeholder="请选择负责人" style="width:100%">
+                        <el-option v-for="d in developers" :key="d.user_id"
+                                   :label="d.full_name" :value="d.user_id"></el-option>
+                    </el-select>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="assignDialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="submitAssign">确定</el-button>
+            </template>
+        </el-dialog>
+
+        <!-- 添加员工弹窗 -->
+        <el-dialog v-model="userDialogVisible" title="添加员工" width="450px">
+            <el-form :model="newUser" label-width="100px">
+                <el-form-item label="用户名">
+                    <el-input v-model="newUser.username" placeholder="登录用，如 dev3"></el-input>
+                </el-form-item>
+                <el-form-item label="密码">
+                    <el-input v-model="newUser.password" placeholder="登录密码"></el-input>
+                </el-form-item>
+                <el-form-item label="姓名">
+                    <el-input v-model="newUser.fullName" placeholder="真实姓名，如 张三"></el-input>
+                </el-form-item>
+                <el-form-item label="角色">
+                    <el-select v-model="newUser.role" style="width:100%">
+                        <el-option label="开发人员" value="developer"></el-option>
+                        <el-option label="管理员" value="admin"></el-option>
+                    </el-select>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="userDialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="submitUser">保存</el-button>
+            </template>
+        </el-dialog>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+        const { ElMessage, ElMessageBox } = ElementPlus;
+
+        createApp({
+            setup() {
+                const activeTab = ref("tasks");
+
+                const tasks = ref([]);
+                const developers = ref([]);
+                const users = ref([]);
+                const stat = ref({ total: 0, pending: 0, processing: 0, finished: 0 });
+
+                const addDialogVisible = ref(false);
+                const assignDialogVisible = ref(false);
+                const userDialogVisible = ref(false);
+
+                const newTask = ref({ taskTitle: "", taskDescription: "", deadline: "", assignedUserId: null });
+                const newUser = ref({ username: "", password: "", fullName: "", role: "developer" });
+                const currentTask = ref({});
+                const selectedUserId = ref(null);
+
+                // ---------- 任务相关 ----------
+                const loadTasks = async () => {
+                    const res = await axios.get("/api/task/all");
+                    tasks.value = res.data;
+                    const s = await axios.get("/api/task/stat");
+                    stat.value = s.data;
+                };
+
+                const loadDevelopers = async () => {
+                    const res = await axios.get("/api/user/developers");
+                    developers.value = res.data;
+                };
+
+                const openAddDialog = () => {
+                    newTask.value = { taskTitle: "", taskDescription: "", deadline: "", assignedUserId: null };
+                    addDialogVisible.value = true;
+                };
+
+                const submitAdd = async () => {
+                    if (!newTask.value.taskTitle) {
+                        ElMessage.warning("请填写任务标题");
+                        return;
+                    }
+                    await axios.post("/api/task/add", newTask.value);
+                    ElMessage.success("任务添加成功");
+                    addDialogVisible.value = false;
+                    loadTasks();
+                };
+
+                const openAssignDialog = (row) => {
+                    currentTask.value = row;
+                    selectedUserId.value = row.assigned_user_id;
+                    assignDialogVisible.value = true;
+                };
+
+                const submitAssign = async () => {
+                    if (!selectedUserId.value) {
+                        ElMessage.warning("请选择负责人");
+                        return;
+                    }
+                    await axios.put("/api/task/assign", {
+                        taskId: currentTask.value.task_id,
+                        assignedUserId: selectedUserId.value
+                    });
+                    ElMessage.success("任务分配成功");
+                    assignDialogVisible.value = false;
+                    loadTasks();
+                };
+
+                const deleteTask = async (row) => {
+                    try {
+                        await ElMessageBox.confirm(
+                            `确定删除任务「${row.task_title}」吗？此操作不可撤销。`,
+                            "确认删除",
+                            { type: "warning", confirmButtonText: "确定", cancelButtonText: "取消" }
+                        );
+                        await axios.delete("/api/task/delete", { data: { taskId: row.task_id } });
+                        ElMessage.success("任务已删除");
+                        loadTasks();
+                    } catch (e) {}
+                };
+
+                const statusType = (s) => {
+                    return s === "finished" ? "success" : s === "processing" ? "primary" : "warning";
+                };
+                const statusText = (s) => {
+                    return s === "finished" ? "已完成" : s === "processing" ? "进行中" : "待开始";
+                };
+
+                // ---------- 员工相关 ----------
+                const loadUsers = async () => {
+                    const res = await axios.get("/api/user/all");
+                    users.value = res.data;
+                };
+
+                const openUserDialog = () => {
+                    newUser.value = { username: "", password: "", fullName: "", role: "developer" };
+                    userDialogVisible.value = true;
+                };
+
+                const submitUser = async () => {
+                    if (!newUser.value.username || !newUser.value.password || !newUser.value.fullName) {
+                        ElMessage.warning("请填写完整信息");
+                        return;
+                    }
+                    try {
+                        await axios.post("/api/user/add", newUser.value);
+                        ElMessage.success("员工添加成功");
+                        userDialogVisible.value = false;
+                        loadUsers();
+                        loadDevelopers();
+                    } catch (e) {
+                        if (e.response && e.response.status === 400) {
+                            ElMessage.error("用户名已存在");
+                        } else {
+                            ElMessage.error("添加失败");
+                        }
+                    }
+                };
+
+                const deleteUser = async (row) => {
+                    try {
+                        await ElMessageBox.confirm(
+                            `确定删除员工「${row.full_name}」吗？其名下任务将变为未分配。`,
+                            "确认删除",
+                            { type: "warning", confirmButtonText: "确定", cancelButtonText: "取消" }
+                        );
+                        await axios.delete("/api/user/delete", { data: { userId: row.user_id } });
+                        ElMessage.success("员工已删除");
+                        loadUsers();
+                        loadDevelopers();
+                        loadTasks();
+                    } catch (e) {}
+                };
+
+                // ---------- 退出 ----------
+                const logout = () => {
+                    localStorage.removeItem("user");
+                    location.href = "/";
+                };
+
+                onMounted(() => {
+                    loadTasks();
+                    loadDevelopers();
+                    loadUsers();
+                });
+
+                return {
+                    activeTab,
+                    tasks, developers, users, stat,
+                    addDialogVisible, assignDialogVisible, userDialogVisible,
+                    newTask, newUser, currentTask, selectedUserId,
+                    loadTasks, openAddDialog, submitAdd,
+                    openAssignDialog, submitAssign, deleteTask,
+                    loadUsers, openUserDialog, submitUser, deleteUser,
+                    statusType, statusText, logout
+                };
+            }
+        }).use(ElementPlus).mount("#app");
+    </script>
+</body>
+</html>
