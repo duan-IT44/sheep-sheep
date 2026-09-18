@@ -28,3 +28,13 @@
 
 - 管理员：admin / 123456
 - 开发人员：dev1 / 123456
+
+
+## 项目结构
+task_system/
+├── app.py
+├── templates/
+│ ├── login.html
+│ ├── admin.html
+│ └── dev.html
+└── README.md
