@@ -1,3 +1,4 @@
+# 任务分配管理系统 v1.1
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import sqlite3
