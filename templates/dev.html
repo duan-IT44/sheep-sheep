@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>我的任务 - 任务分配管理系统</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/element-plus"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <style>
+        body { margin: 0; background: #F5F7FA; font-family: "Microsoft YaHei", Arial, sans-serif; }
+        .header {
+            background: #1F5FBF; color: white;
+            padding: 18px 30px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .header h2 { margin: 0; }
+        .container { padding: 20px 30px; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="header">
+            <h2>我的任务 - {{ userName }}</h2>
+            <el-button size="small" @click="logout">退出登录</el-button>
+        </div>
+
+        <div class="container">
+            <div style="margin-bottom:15px;">
+                <el-button @click="loadTasks">刷新</el-button>
+            </div>
+
+            <el-table :data="tasks" border style="width:100%">
+                <el-table-column prop="task_id" label="编号" width="70"></el-table-column>
+                <el-table-column prop="task_title" label="任务标题"></el-table-column>
+                <el-table-column prop="task_description" label="任务描述"></el-table-column>
+                <el-table-column prop="deadline" label="截止日期" width="130"></el-table-column>
+                <el-table-column label="状态" width="160">
+                    <template #default="scope">
+                        <el-select v-model="scope.row.task_status"
+                                   @change="updateStatus(scope.row)"
+                                   size="small">
+                            <el-option label="待开始" value="pending"></el-option>
+                            <el-option label="进行中" value="processing"></el-option>
+                            <el-option label="已完成" value="finished"></el-option>
+                        </el-select>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+        const { ElMessage } = ElementPlus;
+
+        createApp({
+            setup() {
+                const tasks = ref([]);
+                const user = ref(JSON.parse(localStorage.getItem("user") || "{}"));
+                const userName = ref(user.value.full_name || "开发人员");
+
+                const loadTasks = async () => {
+                    if (!user.value.user_id) {
+                        location.href = "/";
+                        return;
+                    }
+                    const res = await axios.get("/api/task/my", {
+                        params: { userId: user.value.user_id }
+                    });
+                    tasks.value = res.data;
+                };
+
+                const updateStatus = async (row) => {
+                    await axios.put("/api/task/status", {
+                        taskId: row.task_id,
+                        taskStatus: row.task_status
+                    });
+                    ElMessage.success("状态已更新");
+                };
+
+                const logout = () => {
+                    localStorage.removeItem("user");
+                    location.href = "/";
+                };
+
+                onMounted(loadTasks);
+
+                return { tasks, userName, loadTasks, updateStatus, logout };
+            }
+        }).use(ElementPlus).mount("#app");
+    </script>
+</body>
+</html>
