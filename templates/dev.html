@@ -1,14 +1,14 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>我的任务 - 任务分配管理系统</title>
+    <title>My Tasks - Task Management System</title>
     <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://unpkg.com/element-plus"></script>
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     <style>
-        body { margin: 0; background: #F5F7FA; font-family: "Microsoft YaHei", Arial, sans-serif; }
+        body { margin: 0; background: #F5F7FA; font-family: Arial, sans-serif; }
         .header {
             background: #1F5FBF; color: white;
             padding: 18px 30px;
@@ -16,37 +16,105 @@
         }
         .header h2 { margin: 0; }
         .container { padding: 20px 30px; }
+        .stat-row { display: flex; gap: 15px; margin-bottom: 20px; }
+        .stat-card {
+            flex: 1; background: #fff; padding: 20px;
+            border-radius: 8px; border: 1px solid #E0E0E0;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .stat-card.active { border: 2px solid #1F5FBF; }
+        .stat-card .title { color: #888; font-size: 13px; }
+        .stat-card .num { font-size: 28px; font-weight: bold; color: #1F5FBF; margin-top: 8px; }
+        .stat-card.done .num { color: #4CAF50; }
+        .stat-card.doing .num { color: #2196F3; }
+        .stat-card.pending .num { color: #FF9800; }
+        .filter-bar {
+            background: #fff; padding: 15px 20px; margin-bottom: 15px;
+            border-radius: 8px; border: 1px solid #E0E0E0;
+            display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+        }
+        .pagination-row {
+            margin-top: 15px; display: flex; justify-content: flex-end;
+        }
     </style>
 </head>
 <body>
     <div id="app">
         <div class="header">
-            <h2>我的任务 - {{ userName }}</h2>
-            <el-button size="small" @click="logout">退出登录</el-button>
+            <h2>My Tasks - {{ userName }}</h2>
+            <el-button size="small" @click="logout">Logout</el-button>
         </div>
 
         <div class="container">
-            <div style="margin-bottom:15px;">
-                <el-button @click="loadTasks">刷新</el-button>
+            <!-- Statistics Cards (clickable, filtered to current user's tasks) -->
+            <div class="stat-row">
+                <div class="stat-card" :class="{active: filters.status === ''}" @click="filterByCard('')">
+                    <div class="title">Total Tasks</div>
+                    <div class="num">{{ stat.total }}</div>
+                </div>
+                <div class="stat-card pending" :class="{active: filters.status === 'pending'}" @click="filterByCard('pending')">
+                    <div class="title">Pending</div>
+                    <div class="num">{{ stat.pending }}</div>
+                </div>
+                <div class="stat-card doing" :class="{active: filters.status === 'processing'}" @click="filterByCard('processing')">
+                    <div class="title">In Progress</div>
+                    <div class="num">{{ stat.processing }}</div>
+                </div>
+                <div class="stat-card done" :class="{active: filters.status === 'finished'}" @click="filterByCard('finished')">
+                    <div class="title">Finished</div>
+                    <div class="num">{{ stat.finished }}</div>
+                </div>
             </div>
 
+            <!-- Filter Bar -->
+            <div class="filter-bar">
+                <span style="color:#666;font-size:13px;">Filter:</span>
+                <el-select v-model="filters.status" placeholder="Status" clearable style="width:130px;" size="small">
+                    <el-option label="Pending" value="pending"></el-option>
+                    <el-option label="In Progress" value="processing"></el-option>
+                    <el-option label="Finished" value="finished"></el-option>
+                </el-select>
+                <el-date-picker v-model="filters.startDate" type="date" placeholder="Start Date" value-format="YYYY-MM-DD" size="small" style="width:140px;"></el-date-picker>
+                <el-date-picker v-model="filters.endDate" type="date" placeholder="End Date" value-format="YYYY-MM-DD" size="small" style="width:140px;"></el-date-picker>
+                <el-input v-model="filters.keyword" placeholder="Keyword" clearable size="small" style="width:150px;"></el-input>
+                <el-button type="primary" size="small" @click="applyFilter">Search</el-button>
+                <el-button size="small" @click="resetFilter">Reset</el-button>
+                <el-button size="small" @click="loadTasks" style="margin-left:auto;">Refresh</el-button>
+            </div>
+
+            <!-- Task Table -->
             <el-table :data="tasks" border style="width:100%">
-                <el-table-column prop="task_id" label="编号" width="70"></el-table-column>
-                <el-table-column prop="task_title" label="任务标题"></el-table-column>
-                <el-table-column prop="task_description" label="任务描述"></el-table-column>
-                <el-table-column prop="deadline" label="截止日期" width="130"></el-table-column>
-                <el-table-column label="状态" width="160">
+                <el-table-column prop="task_id" label="ID" width="70"></el-table-column>
+                <el-table-column prop="task_title" label="Task Title"></el-table-column>
+                <el-table-column prop="task_description" label="Description"></el-table-column>
+                <el-table-column prop="start_date" label="Start Date" width="130"></el-table-column>
+                <el-table-column prop="deadline" label="Deadline" width="130"></el-table-column>
+                <el-table-column label="Status" width="160">
                     <template #default="scope">
                         <el-select v-model="scope.row.task_status"
                                    @change="updateStatus(scope.row)"
                                    size="small">
-                            <el-option label="待开始" value="pending"></el-option>
-                            <el-option label="进行中" value="processing"></el-option>
-                            <el-option label="已完成" value="finished"></el-option>
+                            <el-option label="Pending" value="pending"></el-option>
+                            <el-option label="In Progress" value="processing"></el-option>
+                            <el-option label="Finished" value="finished"></el-option>
                         </el-select>
                     </template>
                 </el-table-column>
             </el-table>
+
+            <!-- Pagination -->
+            <div class="pagination-row">
+                <el-pagination
+                    v-model:current-page="pagination.page"
+                    v-model:page-size="pagination.pageSize"
+                    :page-sizes="[5, 10, 20, 50]"
+                    :total="pagination.total"
+                    layout="total, sizes, prev, pager, next"
+                    @size-change="loadTasks"
+                    @current-change="loadTasks">
+                </el-pagination>
+            </div>
         </div>
     </div>
 
@@ -58,17 +126,53 @@
             setup() {
                 const tasks = ref([]);
                 const user = ref(JSON.parse(localStorage.getItem("user") || "{}"));
-                const userName = ref(user.value.full_name || "开发人员");
+                const userName = ref(user.value.full_name || "Developer");
+                const stat = ref({ total: 0, pending: 0, processing: 0, finished: 0 });
+
+                const filters = ref({ status: "", startDate: "", endDate: "", keyword: "" });
+                const pagination = ref({ page: 1, pageSize: 10, total: 0 });
 
                 const loadTasks = async () => {
                     if (!user.value.user_id) {
                         location.href = "/";
                         return;
                     }
-                    const res = await axios.get("/api/task/my", {
+                    const params = {
+                        userId: user.value.user_id,
+                        page: pagination.value.page,
+                        pageSize: pagination.value.pageSize
+                    };
+                    if (filters.value.status) params.status = filters.value.status;
+                    if (filters.value.startDate) params.startDate = filters.value.startDate;
+                    if (filters.value.endDate) params.endDate = filters.value.endDate;
+                    if (filters.value.keyword) params.keyword = filters.value.keyword;
+
+                    const res = await axios.get("/api/task/my", { params });
+                    tasks.value = res.data.items;
+                    pagination.value.total = res.data.total;
+
+                    // Load statistics for current user only
+                    const s = await axios.get("/api/task/my/stat", {
                         params: { userId: user.value.user_id }
                     });
-                    tasks.value = res.data;
+                    stat.value = s.data;
+                };
+
+                const applyFilter = () => {
+                    pagination.value.page = 1;
+                    loadTasks();
+                };
+
+                const resetFilter = () => {
+                    filters.value = { status: "", startDate: "", endDate: "", keyword: "" };
+                    pagination.value.page = 1;
+                    loadTasks();
+                };
+
+                const filterByCard = (status) => {
+                    filters.value.status = status;
+                    pagination.value.page = 1;
+                    loadTasks();
                 };
 
                 const updateStatus = async (row) => {
@@ -76,7 +180,8 @@
                         taskId: row.task_id,
                         taskStatus: row.task_status
                     });
-                    ElMessage.success("状态已更新");
+                    ElMessage.success("Status updated");
+                    loadTasks();
                 };
 
                 const logout = () => {
@@ -86,7 +191,11 @@
 
                 onMounted(loadTasks);
 
-                return { tasks, userName, loadTasks, updateStatus, logout };
+                return {
+                    tasks, userName, stat, filters, pagination,
+                    loadTasks, applyFilter, resetFilter, filterByCard,
+                    updateStatus, logout
+                };
             }
         }).use(ElementPlus).mount("#app");
     </script>

@@ -1,14 +1,14 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>管理员 - 任务分配管理系统</title>
+    <title>Admin - Task Management System</title>
     <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://unpkg.com/element-plus"></script>
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     <style>
-        body { margin: 0; background: #F5F7FA; font-family: "Microsoft YaHei", Arial, sans-serif; }
+        body { margin: 0; background: #F5F7FA; font-family: Arial, sans-serif; }
         .header {
             background: #1F5FBF; color: white;
             padding: 18px 30px;
@@ -20,174 +20,254 @@
         .stat-card {
             flex: 1; background: #fff; padding: 20px;
             border-radius: 8px; border: 1px solid #E0E0E0;
+            cursor: pointer; transition: all 0.2s;
         }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .stat-card.active { border: 2px solid #1F5FBF; }
         .stat-card .title { color: #888; font-size: 13px; }
         .stat-card .num { font-size: 28px; font-weight: bold; color: #1F5FBF; margin-top: 8px; }
         .stat-card.done .num { color: #4CAF50; }
         .stat-card.doing .num { color: #2196F3; }
         .stat-card.pending .num { color: #FF9800; }
+        .filter-bar {
+            background: #fff; padding: 15px 20px; margin-bottom: 15px;
+            border-radius: 8px; border: 1px solid #E0E0E0;
+            display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+        }
+        .pagination-row {
+            margin-top: 15px; display: flex; justify-content: flex-end;
+        }
     </style>
 </head>
 <body>
     <div id="app">
         <div class="header">
-            <h2>任务分配管理系统 - 管理员</h2>
-            <el-button size="small" @click="logout">退出登录</el-button>
+            <h2>Task Management System - Admin</h2>
+            <el-button size="small" @click="logout">Logout</el-button>
         </div>
 
         <div class="container">
             <el-tabs v-model="activeTab" type="border-card">
 
-                <!-- ========== 标签页1：任务管理 ========== -->
-                <el-tab-pane label="任务管理" name="tasks">
+                <!-- ========== Tab 1: Task Management ========== -->
+                <el-tab-pane label="Task Management" name="tasks">
+                    <!-- Statistics Cards (clickable) -->
                     <div class="stat-row">
-                        <div class="stat-card">
-                            <div class="title">任务总数</div>
+                        <div class="stat-card" :class="{active: filters.status === ''}" @click="filterByCard('')">
+                            <div class="title">Total Tasks</div>
                             <div class="num">{{ stat.total }}</div>
                         </div>
-                        <div class="stat-card pending">
-                            <div class="title">待开始</div>
+                        <div class="stat-card pending" :class="{active: filters.status === 'pending'}" @click="filterByCard('pending')">
+                            <div class="title">Pending</div>
                             <div class="num">{{ stat.pending }}</div>
                         </div>
-                        <div class="stat-card doing">
-                            <div class="title">进行中</div>
+                        <div class="stat-card doing" :class="{active: filters.status === 'processing'}" @click="filterByCard('processing')">
+                            <div class="title">In Progress</div>
                             <div class="num">{{ stat.processing }}</div>
                         </div>
-                        <div class="stat-card done">
-                            <div class="title">已完成</div>
+                        <div class="stat-card done" :class="{active: filters.status === 'finished'}" @click="filterByCard('finished')">
+                            <div class="title">Finished</div>
                             <div class="num">{{ stat.finished }}</div>
                         </div>
                     </div>
 
-                    <div style="margin-bottom:15px;">
-                        <el-button type="primary" @click="openAddDialog">+ 新建任务</el-button>
-                        <el-button @click="loadTasks">刷新</el-button>
+                    <!-- Filter Bar -->
+                    <div class="filter-bar">
+                        <span style="color:#666;font-size:13px;">Filter:</span>
+                        <el-select v-model="filters.assigneeId" placeholder="Assignee" clearable style="width:130px;" size="small">
+                            <el-option v-for="d in developers" :key="d.user_id" :label="d.full_name" :value="d.user_id"></el-option>
+                        </el-select>
+                        <el-select v-model="filters.status" placeholder="Status" clearable style="width:120px;" size="small">
+                            <el-option label="Pending" value="pending"></el-option>
+                            <el-option label="In Progress" value="processing"></el-option>
+                            <el-option label="Finished" value="finished"></el-option>
+                        </el-select>
+                        <el-date-picker v-model="filters.startDate" type="date" placeholder="Start Date" value-format="YYYY-MM-DD" size="small" style="width:140px;"></el-date-picker>
+                        <el-date-picker v-model="filters.endDate" type="date" placeholder="End Date" value-format="YYYY-MM-DD" size="small" style="width:140px;"></el-date-picker>
+                        <el-input v-model="filters.keyword" placeholder="Keyword" clearable size="small" style="width:130px;"></el-input>
+                        <el-button type="primary" size="small" @click="applyFilter">Search</el-button>
+                        <el-button size="small" @click="resetFilter">Reset</el-button>
+                        <el-button type="success" size="small" @click="openAddDialog" style="margin-left:auto;">+ New Task</el-button>
                     </div>
 
+                    <!-- Task Table -->
                     <el-table :data="tasks" border style="width:100%">
-                        <el-table-column prop="task_id" label="编号" width="70"></el-table-column>
-                        <el-table-column prop="task_title" label="任务标题"></el-table-column>
-                        <el-table-column prop="task_description" label="任务描述"></el-table-column>
-                        <el-table-column label="负责人" width="120">
+                        <el-table-column prop="task_id" label="ID" width="60"></el-table-column>
+                        <el-table-column prop="task_title" label="Task Title"></el-table-column>
+                        <el-table-column prop="task_description" label="Description"></el-table-column>
+                        <el-table-column label="Assignee" width="110">
                             <template #default="scope">
                                 {{ scope.row.assignee_name || '-' }}
                             </template>
                         </el-table-column>
-                        <el-table-column prop="deadline" label="截止日期" width="130"></el-table-column>
-                        <el-table-column label="状态" width="130">
+                        <el-table-column prop="start_date" label="Start Date" width="120"></el-table-column>
+                        <el-table-column prop="deadline" label="Deadline" width="120"></el-table-column>
+                        <el-table-column label="Status" width="120">
                             <template #default="scope">
                                 <el-tag :type="statusType(scope.row.task_status)">
                                     {{ statusText(scope.row.task_status) }}
                                 </el-tag>
                             </template>
                         </el-table-column>
-                        <el-table-column label="操作" width="220">
+                        <el-table-column label="Actions" width="270">
                             <template #default="scope">
-                                <el-button size="small" @click="openAssignDialog(scope.row)">分配</el-button>
-                                <el-button size="small" type="danger" @click="deleteTask(scope.row)">删除</el-button>
+                                <el-button size="small" @click="openEditTaskDialog(scope.row)">Edit</el-button>
+                                <el-button size="small" @click="openAssignDialog(scope.row)">Assign</el-button>
+                                <el-button size="small" type="danger" @click="deleteTask(scope.row)">Delete</el-button>
                             </template>
                         </el-table-column>
                     </el-table>
+
+                    <!-- Pagination -->
+                    <div class="pagination-row">
+                        <el-pagination
+                            v-model:current-page="pagination.page"
+                            v-model:page-size="pagination.pageSize"
+                            :page-sizes="[5, 10, 20, 50]"
+                            :total="pagination.total"
+                            layout="total, sizes, prev, pager, next"
+                            @size-change="loadTasks"
+                            @current-change="loadTasks">
+                        </el-pagination>
+                    </div>
                 </el-tab-pane>
 
-                <!-- ========== 标签页2：员工管理 ========== -->
-                <el-tab-pane label="员工管理" name="users">
+                <!-- ========== Tab 2: User Management ========== -->
+                <el-tab-pane label="User Management" name="users">
                     <div style="margin-bottom:15px;">
-                        <el-button type="primary" @click="openUserDialog">+ 添加员工</el-button>
-                        <el-button @click="loadUsers">刷新</el-button>
+                        <el-button type="primary" @click="openUserDialog">+ Add User</el-button>
+                        <el-button @click="loadUsers">Refresh</el-button>
                     </div>
 
                     <el-table :data="users" border style="width:100%">
-                        <el-table-column prop="user_id" label="编号" width="80"></el-table-column>
-                        <el-table-column prop="username" label="用户名" width="150"></el-table-column>
-                        <el-table-column prop="full_name" label="姓名" width="150"></el-table-column>
-                        <el-table-column label="角色" width="130">
+                        <el-table-column prop="user_id" label="ID" width="80"></el-table-column>
+                        <el-table-column prop="username" label="Username" width="150"></el-table-column>
+                        <el-table-column prop="full_name" label="Full Name" width="150"></el-table-column>
+                        <el-table-column label="Role" width="130">
                             <template #default="scope">
                                 <el-tag :type="scope.row.role === 'admin' ? 'danger' : 'success'">
-                                    {{ scope.row.role === 'admin' ? '管理员' : '开发人员' }}
+                                    {{ scope.row.role === 'admin' ? 'Admin' : 'Developer' }}
                                 </el-tag>
                             </template>
                         </el-table-column>
-                        <el-table-column label="操作" width="150">
+                        <el-table-column label="Actions" width="220">
                             <template #default="scope">
+                                <el-button size="small" @click="openEditUserDialog(scope.row)">Edit</el-button>
                                 <el-button v-if="scope.row.username !== 'admin'"
                                            size="small" type="danger"
-                                           @click="deleteUser(scope.row)">删除</el-button>
-                                <span v-else style="color:#999;font-size:12px;">不可删除</span>
+                                           @click="deleteUser(scope.row)">Delete</el-button>
+                                <span v-else style="color:#999;font-size:12px;margin-left:8px;">Protected</span>
                             </template>
                         </el-table-column>
                     </el-table>
                 </el-tab-pane>
-
             </el-tabs>
         </div>
 
-        <!-- 新建任务弹窗 -->
-        <el-dialog v-model="addDialogVisible" title="新建任务" width="500px">
+        <!-- New Task Dialog -->
+        <el-dialog v-model="addDialogVisible" title="New Task" width="500px">
             <el-form :model="newTask" label-width="100px">
-                <el-form-item label="任务标题">
+                <el-form-item label="Task Title">
                     <el-input v-model="newTask.taskTitle"></el-input>
                 </el-form-item>
-                <el-form-item label="任务描述">
+                <el-form-item label="Description">
                     <el-input v-model="newTask.taskDescription" type="textarea"></el-input>
                 </el-form-item>
-                <el-form-item label="截止日期">
-                    <el-input v-model="newTask.deadline" placeholder="格式：YYYY-MM-DD"></el-input>
+                <el-form-item label="Start Date">
+                    <el-date-picker v-model="newTask.startDate" type="date" placeholder="Start Date" value-format="YYYY-MM-DD" style="width:100%;"></el-date-picker>
                 </el-form-item>
-                <el-form-item label="负责人">
-                    <el-select v-model="newTask.assignedUserId" placeholder="请选择负责人" style="width:100%">
-                        <el-option v-for="d in developers" :key="d.user_id"
-                                   :label="d.full_name" :value="d.user_id"></el-option>
+                <el-form-item label="Deadline">
+                    <el-date-picker v-model="newTask.deadline" type="date" placeholder="Deadline" value-format="YYYY-MM-DD" style="width:100%;"></el-date-picker>
+                </el-form-item>
+                <el-form-item label="Assignee">
+                    <el-select v-model="newTask.assignedUserId" placeholder="Select developer" style="width:100%">
+                        <el-option v-for="d in developers" :key="d.user_id" :label="d.full_name" :value="d.user_id"></el-option>
                     </el-select>
                 </el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="addDialogVisible = false">取消</el-button>
-                <el-button type="primary" @click="submitAdd">保存</el-button>
+                <el-button @click="addDialogVisible = false">Cancel</el-button>
+                <el-button type="primary" @click="submitAdd">Save</el-button>
             </template>
         </el-dialog>
 
-        <!-- 分配任务弹窗 -->
-        <el-dialog v-model="assignDialogVisible" title="分配任务" width="400px">
+        <!-- Edit Task Dialog -->
+        <el-dialog v-model="editTaskDialogVisible" title="Edit Task" width="500px">
+            <el-form :model="editTask" label-width="100px">
+                <el-form-item label="Task Title">
+                    <el-input v-model="editTask.taskTitle"></el-input>
+                </el-form-item>
+                <el-form-item label="Description">
+                    <el-input v-model="editTask.taskDescription" type="textarea"></el-input>
+                </el-form-item>
+                <el-form-item label="Start Date">
+                    <el-date-picker v-model="editTask.startDate" type="date" placeholder="Start Date" value-format="YYYY-MM-DD" style="width:100%;"></el-date-picker>
+                </el-form-item>
+                <el-form-item label="Deadline">
+                    <el-date-picker v-model="editTask.deadline" type="date" placeholder="Deadline" value-format="YYYY-MM-DD" style="width:100%;"></el-date-picker>
+                </el-form-item>
+                <el-form-item label="Assignee">
+                    <el-select v-model="editTask.assignedUserId" placeholder="Select developer" style="width:100%">
+                        <el-option v-for="d in developers" :key="d.user_id" :label="d.full_name" :value="d.user_id"></el-option>
+                    </el-select>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="editTaskDialogVisible = false">Cancel</el-button>
+                <el-button type="primary" @click="submitEditTask">Save</el-button>
+            </template>
+        </el-dialog>
+
+        <!-- Assign Task Dialog -->
+        <el-dialog v-model="assignDialogVisible" title="Assign Task" width="400px">
             <el-form label-width="100px">
-                <el-form-item label="任务">
-                    <span>{{ currentTask.task_title }}</span>
-                </el-form-item>
-                <el-form-item label="负责人">
-                    <el-select v-model="selectedUserId" placeholder="请选择负责人" style="width:100%">
-                        <el-option v-for="d in developers" :key="d.user_id"
-                                   :label="d.full_name" :value="d.user_id"></el-option>
+                <el-form-item label="Task"><span>{{ currentTask.task_title }}</span></el-form-item>
+                <el-form-item label="Assignee">
+                    <el-select v-model="selectedUserId" placeholder="Select developer" style="width:100%">
+                        <el-option v-for="d in developers" :key="d.user_id" :label="d.full_name" :value="d.user_id"></el-option>
                     </el-select>
                 </el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="assignDialogVisible = false">取消</el-button>
-                <el-button type="primary" @click="submitAssign">确定</el-button>
+                <el-button @click="assignDialogVisible = false">Cancel</el-button>
+                <el-button type="primary" @click="submitAssign">Confirm</el-button>
             </template>
         </el-dialog>
 
-        <!-- 添加员工弹窗 -->
-        <el-dialog v-model="userDialogVisible" title="添加员工" width="450px">
+        <!-- Add User Dialog -->
+        <el-dialog v-model="userDialogVisible" title="Add User" width="450px">
             <el-form :model="newUser" label-width="100px">
-                <el-form-item label="用户名">
-                    <el-input v-model="newUser.username" placeholder="登录用，如 dev3"></el-input>
-                </el-form-item>
-                <el-form-item label="密码">
-                    <el-input v-model="newUser.password" placeholder="登录密码"></el-input>
-                </el-form-item>
-                <el-form-item label="姓名">
-                    <el-input v-model="newUser.fullName" placeholder="真实姓名，如 张三"></el-input>
-                </el-form-item>
-                <el-form-item label="角色">
+                <el-form-item label="Username"><el-input v-model="newUser.username" placeholder="e.g. dev3"></el-input></el-form-item>
+                <el-form-item label="Password"><el-input v-model="newUser.password" placeholder="Login password"></el-input></el-form-item>
+                <el-form-item label="Full Name"><el-input v-model="newUser.fullName" placeholder="e.g. John Smith"></el-input></el-form-item>
+                <el-form-item label="Role">
                     <el-select v-model="newUser.role" style="width:100%">
-                        <el-option label="开发人员" value="developer"></el-option>
-                        <el-option label="管理员" value="admin"></el-option>
+                        <el-option label="Developer" value="developer"></el-option>
+                        <el-option label="Admin" value="admin"></el-option>
                     </el-select>
                 </el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="userDialogVisible = false">取消</el-button>
-                <el-button type="primary" @click="submitUser">保存</el-button>
+                <el-button @click="userDialogVisible = false">Cancel</el-button>
+                <el-button type="primary" @click="submitUser">Save</el-button>
+            </template>
+        </el-dialog>
+
+        <!-- Edit User Dialog -->
+        <el-dialog v-model="editUserDialogVisible" title="Edit User" width="450px">
+            <el-form :model="editUser" label-width="100px">
+                <el-form-item label="Username"><el-input v-model="editUser.username"></el-input></el-form-item>
+                <el-form-item label="Full Name"><el-input v-model="editUser.fullName"></el-input></el-form-item>
+                <el-form-item label="Role">
+                    <el-select v-model="editUser.role" style="width:100%">
+                        <el-option label="Developer" value="developer"></el-option>
+                        <el-option label="Admin" value="admin"></el-option>
+                    </el-select>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="editUserDialogVisible = false">Cancel</el-button>
+                <el-button type="primary" @click="submitEditUser">Save</el-button>
             </template>
         </el-dialog>
     </div>
@@ -205,19 +285,38 @@
                 const users = ref([]);
                 const stat = ref({ total: 0, pending: 0, processing: 0, finished: 0 });
 
+                const filters = ref({ assigneeId: null, status: "", startDate: "", endDate: "", keyword: "" });
+                const pagination = ref({ page: 1, pageSize: 10, total: 0 });
+
                 const addDialogVisible = ref(false);
+                const editTaskDialogVisible = ref(false);
                 const assignDialogVisible = ref(false);
                 const userDialogVisible = ref(false);
+                const editUserDialogVisible = ref(false);
 
-                const newTask = ref({ taskTitle: "", taskDescription: "", deadline: "", assignedUserId: null });
+                const newTask = ref({ taskTitle: "", taskDescription: "", startDate: "", deadline: "", assignedUserId: null });
+                const editTask = ref({ taskId: null, taskTitle: "", taskDescription: "", startDate: "", deadline: "", assignedUserId: null });
                 const newUser = ref({ username: "", password: "", fullName: "", role: "developer" });
+                const editUser = ref({ userId: null, username: "", fullName: "", role: "developer" });
                 const currentTask = ref({});
                 const selectedUserId = ref(null);
 
-                // ---------- 任务相关 ----------
+                // ---------- Tasks ----------
                 const loadTasks = async () => {
-                    const res = await axios.get("/api/task/all");
-                    tasks.value = res.data;
+                    const params = {
+                        page: pagination.value.page,
+                        pageSize: pagination.value.pageSize
+                    };
+                    if (filters.value.assigneeId) params.assigneeId = filters.value.assigneeId;
+                    if (filters.value.status) params.status = filters.value.status;
+                    if (filters.value.startDate) params.startDate = filters.value.startDate;
+                    if (filters.value.endDate) params.endDate = filters.value.endDate;
+                    if (filters.value.keyword) params.keyword = filters.value.keyword;
+
+                    const res = await axios.get("/api/task/all", { params });
+                    tasks.value = res.data.items;
+                    pagination.value.total = res.data.total;
+
                     const s = await axios.get("/api/task/stat");
                     stat.value = s.data;
                 };
@@ -227,19 +326,59 @@
                     developers.value = res.data;
                 };
 
+                const applyFilter = () => {
+                    pagination.value.page = 1;
+                    loadTasks();
+                };
+
+                const resetFilter = () => {
+                    filters.value = { assigneeId: null, status: "", startDate: "", endDate: "", keyword: "" };
+                    pagination.value.page = 1;
+                    loadTasks();
+                };
+
+                const filterByCard = (status) => {
+                    filters.value.status = status;
+                    pagination.value.page = 1;
+                    loadTasks();
+                };
+
                 const openAddDialog = () => {
-                    newTask.value = { taskTitle: "", taskDescription: "", deadline: "", assignedUserId: null };
+                    newTask.value = { taskTitle: "", taskDescription: "", startDate: "", deadline: "", assignedUserId: null };
                     addDialogVisible.value = true;
                 };
 
                 const submitAdd = async () => {
                     if (!newTask.value.taskTitle) {
-                        ElMessage.warning("请填写任务标题");
+                        ElMessage.warning("Task title is required");
                         return;
                     }
                     await axios.post("/api/task/add", newTask.value);
-                    ElMessage.success("任务添加成功");
+                    ElMessage.success("Task added successfully");
                     addDialogVisible.value = false;
+                    loadTasks();
+                };
+
+                const openEditTaskDialog = (row) => {
+                    editTask.value = {
+                        taskId: row.task_id,
+                        taskTitle: row.task_title,
+                        taskDescription: row.task_description || "",
+                        startDate: row.start_date || "",
+                        deadline: row.deadline || "",
+                        assignedUserId: row.assigned_user_id
+                    };
+                    editTaskDialogVisible.value = true;
+                };
+
+                const submitEditTask = async () => {
+                    if (!editTask.value.taskTitle) {
+                        ElMessage.warning("Task title is required");
+                        return;
+                    }
+                    await axios.put("/api/task/update", editTask.value);
+                    ElMessage.success("Task updated successfully");
+                    editTaskDialogVisible.value = false;
                     loadTasks();
                 };
 
@@ -251,14 +390,14 @@
 
                 const submitAssign = async () => {
                     if (!selectedUserId.value) {
-                        ElMessage.warning("请选择负责人");
+                        ElMessage.warning("Please select a developer");
                         return;
                     }
                     await axios.put("/api/task/assign", {
                         taskId: currentTask.value.task_id,
                         assignedUserId: selectedUserId.value
                     });
-                    ElMessage.success("任务分配成功");
+                    ElMessage.success("Task assigned successfully");
                     assignDialogVisible.value = false;
                     loadTasks();
                 };
@@ -266,24 +405,20 @@
                 const deleteTask = async (row) => {
                     try {
                         await ElMessageBox.confirm(
-                            `确定删除任务「${row.task_title}」吗？此操作不可撤销。`,
-                            "确认删除",
-                            { type: "warning", confirmButtonText: "确定", cancelButtonText: "取消" }
+                            `Delete task "${row.task_title}"? This action cannot be undone.`,
+                            "Confirm Delete",
+                            { type: "warning", confirmButtonText: "Confirm", cancelButtonText: "Cancel" }
                         );
                         await axios.delete("/api/task/delete", { data: { taskId: row.task_id } });
-                        ElMessage.success("任务已删除");
+                        ElMessage.success("Task deleted");
                         loadTasks();
                     } catch (e) {}
                 };
 
-                const statusType = (s) => {
-                    return s === "finished" ? "success" : s === "processing" ? "primary" : "warning";
-                };
-                const statusText = (s) => {
-                    return s === "finished" ? "已完成" : s === "processing" ? "进行中" : "待开始";
-                };
+                const statusType = (s) => s === "finished" ? "success" : s === "processing" ? "primary" : "warning";
+                const statusText = (s) => s === "finished" ? "Finished" : s === "processing" ? "In Progress" : "Pending";
 
-                // ---------- 员工相关 ----------
+                // ---------- Users ----------
                 const loadUsers = async () => {
                     const res = await axios.get("/api/user/all");
                     users.value = res.data;
@@ -296,40 +431,57 @@
 
                 const submitUser = async () => {
                     if (!newUser.value.username || !newUser.value.password || !newUser.value.fullName) {
-                        ElMessage.warning("请填写完整信息");
+                        ElMessage.warning("Please fill in all fields");
                         return;
                     }
                     try {
                         await axios.post("/api/user/add", newUser.value);
-                        ElMessage.success("员工添加成功");
+                        ElMessage.success("User added successfully");
                         userDialogVisible.value = false;
                         loadUsers();
                         loadDevelopers();
                     } catch (e) {
-                        if (e.response && e.response.status === 400) {
-                            ElMessage.error("用户名已存在");
-                        } else {
-                            ElMessage.error("添加失败");
-                        }
+                        ElMessage.error(e.response && e.response.status === 400 ? "Username already exists" : "Failed to add user");
+                    }
+                };
+
+                const openEditUserDialog = (row) => {
+                    editUser.value = { userId: row.user_id, username: row.username, fullName: row.full_name, role: row.role };
+                    editUserDialogVisible.value = true;
+                };
+
+                const submitEditUser = async () => {
+                    if (!editUser.value.username || !editUser.value.fullName) {
+                        ElMessage.warning("Please fill in all fields");
+                        return;
+                    }
+                    try {
+                        await axios.put("/api/user/update", editUser.value);
+                        ElMessage.success("User updated successfully");
+                        editUserDialogVisible.value = false;
+                        loadUsers();
+                        loadDevelopers();
+                        loadTasks();
+                    } catch (e) {
+                        ElMessage.error(e.response && e.response.status === 400 ? "Username already exists" : "Failed to update user");
                     }
                 };
 
                 const deleteUser = async (row) => {
                     try {
                         await ElMessageBox.confirm(
-                            `确定删除员工「${row.full_name}」吗？其名下任务将变为未分配。`,
-                            "确认删除",
-                            { type: "warning", confirmButtonText: "确定", cancelButtonText: "取消" }
+                            `Delete user "${row.full_name}"? Their tasks will become unassigned.`,
+                            "Confirm Delete",
+                            { type: "warning", confirmButtonText: "Confirm", cancelButtonText: "Cancel" }
                         );
                         await axios.delete("/api/user/delete", { data: { userId: row.user_id } });
-                        ElMessage.success("员工已删除");
+                        ElMessage.success("User deleted");
                         loadUsers();
                         loadDevelopers();
                         loadTasks();
                     } catch (e) {}
                 };
 
-                // ---------- 退出 ----------
                 const logout = () => {
                     localStorage.removeItem("user");
                     location.href = "/";
@@ -344,11 +496,14 @@
                 return {
                     activeTab,
                     tasks, developers, users, stat,
-                    addDialogVisible, assignDialogVisible, userDialogVisible,
-                    newTask, newUser, currentTask, selectedUserId,
-                    loadTasks, openAddDialog, submitAdd,
+                    filters, pagination,
+                    addDialogVisible, editTaskDialogVisible, assignDialogVisible, userDialogVisible, editUserDialogVisible,
+                    newTask, editTask, newUser, editUser, currentTask, selectedUserId,
+                    loadTasks, applyFilter, resetFilter, filterByCard,
+                    openAddDialog, submitAdd, openEditTaskDialog, submitEditTask,
                     openAssignDialog, submitAssign, deleteTask,
                     loadUsers, openUserDialog, submitUser, deleteUser,
+                    openEditUserDialog, submitEditUser,
                     statusType, statusText, logout
                 };
             }

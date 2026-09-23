@@ -1,4 +1,4 @@
-# 任务分配管理系统 v1.1
+# Task Management System v1.6
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import sqlite3
@@ -6,13 +6,12 @@ import sqlite3
 app = Flask(__name__)
 CORS(app)
 
-# 让 Jinja2 改用 [[ ]] 作为变量分隔符，把 {{ }} 让给 Vue
 app.jinja_env.variable_start_string = "[["
 app.jinja_env.variable_end_string = "]]"
 
 DB_FILE = "task_system.db"
 
-# ========== 数据库初始化 ==========
+# ========== Database Initialization ==========
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -32,6 +31,7 @@ def init_db():
             task_id INTEGER PRIMARY KEY AUTOINCREMENT,
             task_title TEXT NOT NULL,
             task_description TEXT,
+            start_date TEXT,
             create_time TEXT DEFAULT CURRENT_TIMESTAMP,
             deadline TEXT,
             assigned_user_id INTEGER,
@@ -40,15 +40,20 @@ def init_db():
         )
     """)
 
+    cursor.execute("PRAGMA table_info(task)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if "start_date" not in columns:
+        cursor.execute("ALTER TABLE task ADD COLUMN start_date TEXT")
+
     cursor.execute("SELECT COUNT(*) FROM user")
     if cursor.fetchone()[0] == 0:
         cursor.executemany("""
             INSERT INTO user (username, password, full_name, role)
             VALUES (?, ?, ?, ?)
         """, [
-            ("admin", "123456", "主管", "admin"),
-            ("dev1", "123456", "员工甲", "developer"),
-            ("dev2", "123456", "员工乙", "developer"),
+            ("admin", "123456", "Supervisor", "admin"),
+            ("dev1", "123456", "Alice", "developer"),
+            ("dev2", "123456", "Bob", "developer"),
         ])
 
     conn.commit()
@@ -61,7 +66,7 @@ def get_db():
     return conn
 
 
-# ========== 页面路由 ==========
+# ========== Page Routes ==========
 @app.route("/")
 def index():
     return render_template("login.html")
@@ -75,8 +80,7 @@ def dev_page():
     return render_template("dev.html")
 
 
-# ========== API 接口 ==========
-
+# ========== User APIs ==========
 @app.route("/api/user/login", methods=["POST"])
 def login():
     data = request.get_json()
@@ -102,29 +106,135 @@ def update_pwd():
     return jsonify(1)
 
 
+@app.route("/api/user/all", methods=["GET"])
+def get_all_users():
+    conn = get_db()
+    users = conn.execute(
+        "SELECT user_id, username, full_name, role FROM user ORDER BY user_id"
+    ).fetchall()
+    conn.close()
+    return jsonify([dict(u) for u in users])
+
+
+@app.route("/api/user/add", methods=["POST"])
+def add_user():
+    data = request.get_json()
+    conn = get_db()
+    try:
+        conn.execute("""
+            INSERT INTO user (username, password, full_name, role)
+            VALUES (?, ?, ?, ?)
+        """, (
+            data["username"],
+            data["password"],
+            data["fullName"],
+            data.get("role", "developer")
+        ))
+        conn.commit()
+        conn.close()
+        return jsonify(1)
+    except sqlite3.IntegrityError:
+        conn.close()
+        return jsonify({"error": "Username already exists"}), 400
+
+
+@app.route("/api/user/update", methods=["PUT"])
+def update_user():
+    data = request.get_json()
+    conn = get_db()
+    try:
+        conn.execute("""
+            UPDATE user SET username=?, full_name=?, role=?
+            WHERE user_id=?
+        """, (
+            data["username"],
+            data["fullName"],
+            data["role"],
+            data["userId"]
+        ))
+        conn.commit()
+        conn.close()
+        return jsonify(1)
+    except sqlite3.IntegrityError:
+        conn.close()
+        return jsonify({"error": "Username already exists"}), 400
+
+
+@app.route("/api/user/delete", methods=["DELETE"])
+def delete_user():
+    data = request.get_json()
+    conn = get_db()
+    conn.execute("UPDATE task SET assigned_user_id=NULL WHERE assigned_user_id=?", (data["userId"],))
+    conn.execute("DELETE FROM user WHERE user_id=?", (data["userId"],))
+    conn.commit()
+    conn.close()
+    return jsonify(1)
+
+
+@app.route("/api/user/developers", methods=["GET"])
+def get_developers():
+    conn = get_db()
+    users = conn.execute(
+        "SELECT user_id, full_name FROM user WHERE role='developer'"
+    ).fetchall()
+    conn.close()
+    return jsonify([dict(u) for u in users])
+
+
+# ========== Admin Task APIs ==========
 @app.route("/api/task/all", methods=["GET"])
 def get_all_task():
+    assignee_id = request.args.get("assigneeId")
+    status = request.args.get("status")
+    start_date = request.args.get("startDate")
+    end_date = request.args.get("endDate")
+    keyword = request.args.get("keyword")
+    page = int(request.args.get("page", 1))
+    page_size = int(request.args.get("pageSize", 10))
+
+    conditions = []
+    params = []
+
+    if assignee_id:
+        conditions.append("t.assigned_user_id = ?")
+        params.append(assignee_id)
+    if status:
+        conditions.append("t.task_status = ?")
+        params.append(status)
+    if start_date:
+        conditions.append("t.start_date = ?")
+        params.append(start_date)
+    if end_date:
+        conditions.append("t.deadline = ?")
+        params.append(end_date)
+    if keyword:
+        conditions.append("(t.task_title LIKE ? OR t.task_description LIKE ?)")
+        params.append(f"%{keyword}%")
+        params.append(f"%{keyword}%")
+
+    where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+
     conn = get_db()
-    tasks = conn.execute("""
+    total = conn.execute(f"SELECT COUNT(*) FROM task t{where_clause}", params).fetchone()[0]
+
+    offset = (page - 1) * page_size
+    query_sql = f"""
         SELECT t.*, u.full_name as assignee_name
         FROM task t
         LEFT JOIN user u ON t.assigned_user_id = u.user_id
+        {where_clause}
         ORDER BY t.task_id DESC
-    """).fetchall()
+        LIMIT ? OFFSET ?
+    """
+    tasks = conn.execute(query_sql, params + [page_size, offset]).fetchall()
     conn.close()
-    return jsonify([dict(t) for t in tasks])
 
-
-@app.route("/api/task/my", methods=["GET"])
-def get_my_task():
-    user_id = request.args.get("userId")
-    conn = get_db()
-    tasks = conn.execute(
-        "SELECT * FROM task WHERE assigned_user_id=? ORDER BY task_id DESC",
-        (user_id,)
-    ).fetchall()
-    conn.close()
-    return jsonify([dict(t) for t in tasks])
+    return jsonify({
+        "items": [dict(t) for t in tasks],
+        "total": total,
+        "page": page,
+        "pageSize": page_size
+    })
 
 
 @app.route("/api/task/add", methods=["POST"])
@@ -132,13 +242,35 @@ def add_task():
     data = request.get_json()
     conn = get_db()
     conn.execute("""
-        INSERT INTO task (task_title, task_description, deadline, assigned_user_id, task_status)
-        VALUES (?, ?, ?, ?, 'pending')
+        INSERT INTO task (task_title, task_description, start_date, deadline, assigned_user_id, task_status)
+        VALUES (?, ?, ?, ?, ?, 'pending')
     """, (
         data["taskTitle"],
         data.get("taskDescription", ""),
+        data.get("startDate", ""),
         data.get("deadline", ""),
         data.get("assignedUserId")
+    ))
+    conn.commit()
+    conn.close()
+    return jsonify(1)
+
+
+@app.route("/api/task/update", methods=["PUT"])
+def update_task():
+    data = request.get_json()
+    conn = get_db()
+    conn.execute("""
+        UPDATE task 
+        SET task_title=?, task_description=?, start_date=?, deadline=?, assigned_user_id=?
+        WHERE task_id=?
+    """, (
+        data["taskTitle"],
+        data.get("taskDescription", ""),
+        data.get("startDate", ""),
+        data.get("deadline", ""),
+        data.get("assignedUserId"),
+        data["taskId"]
     ))
     conn.commit()
     conn.close()
@@ -197,66 +329,80 @@ def task_stat():
     })
 
 
-@app.route("/api/user/developers", methods=["GET"])
-def get_developers():
+# ========== Developer Task APIs (NEW) ==========
+@app.route("/api/task/my", methods=["GET"])
+def get_my_task():
+    """Get current developer's tasks with filtering and pagination"""
+    user_id = request.args.get("userId")
+    status = request.args.get("status")
+    start_date = request.args.get("startDate")
+    end_date = request.args.get("endDate")
+    keyword = request.args.get("keyword")
+    page = int(request.args.get("page", 1))
+    page_size = int(request.args.get("pageSize", 10))
+
+    conditions = ["assigned_user_id = ?"]
+    params = [user_id]
+
+    if status:
+        conditions.append("task_status = ?")
+        params.append(status)
+    if start_date:
+        conditions.append("start_date = ?")
+        params.append(start_date)
+    if end_date:
+        conditions.append("deadline = ?")
+        params.append(end_date)
+    if keyword:
+        conditions.append("(task_title LIKE ? OR task_description LIKE ?)")
+        params.append(f"%{keyword}%")
+        params.append(f"%{keyword}%")
+
+    where_clause = " WHERE " + " AND ".join(conditions)
+
     conn = get_db()
-    users = conn.execute(
-        "SELECT user_id, full_name FROM user WHERE role='developer'"
-    ).fetchall()
+    total = conn.execute(f"SELECT COUNT(*) FROM task{where_clause}", params).fetchone()[0]
+
+    offset = (page - 1) * page_size
+    query_sql = f"""
+        SELECT * FROM task
+        {where_clause}
+        ORDER BY task_id DESC
+        LIMIT ? OFFSET ?
+    """
+    tasks = conn.execute(query_sql, params + [page_size, offset]).fetchall()
     conn.close()
-    return jsonify([dict(u) for u in users])
 
-@app.route("/api/user/all", methods=["GET"])
-def get_all_users():
-    """查询所有用户"""
+    return jsonify({
+        "items": [dict(t) for t in tasks],
+        "total": total,
+        "page": page,
+        "pageSize": page_size
+    })
+
+
+@app.route("/api/task/my/stat", methods=["GET"])
+def my_task_stat():
+    """Get statistics for current developer only"""
+    user_id = request.args.get("userId")
     conn = get_db()
-    users = conn.execute(
-        "SELECT user_id, username, full_name, role FROM user ORDER BY user_id"
-    ).fetchall()
+    total = conn.execute("SELECT COUNT(*) FROM task WHERE assigned_user_id=?", (user_id,)).fetchone()[0]
+    pending = conn.execute("SELECT COUNT(*) FROM task WHERE assigned_user_id=? AND task_status='pending'", (user_id,)).fetchone()[0]
+    processing = conn.execute("SELECT COUNT(*) FROM task WHERE assigned_user_id=? AND task_status='processing'", (user_id,)).fetchone()[0]
+    finished = conn.execute("SELECT COUNT(*) FROM task WHERE assigned_user_id=? AND task_status='finished'", (user_id,)).fetchone()[0]
     conn.close()
-    return jsonify([dict(u) for u in users])
-
-
-@app.route("/api/user/add", methods=["POST"])
-def add_user():
-    """添加新员工"""
-    data = request.get_json()
-    conn = get_db()
-    try:
-        conn.execute("""
-            INSERT INTO user (username, password, full_name, role)
-            VALUES (?, ?, ?, ?)
-        """, (
-            data["username"],
-            data["password"],
-            data["fullName"],
-            data.get("role", "developer")
-        ))
-        conn.commit()
-        conn.close()
-        return jsonify(1)
-    except sqlite3.IntegrityError:
-        conn.close()
-        return jsonify({"error": "用户名已存在"}), 400
-
-
-@app.route("/api/user/delete", methods=["DELETE"])
-def delete_user():
-    """删除员工（同时清空其名下任务的负责人）"""
-    data = request.get_json()
-    conn = get_db()
-    conn.execute("UPDATE task SET assigned_user_id=NULL WHERE assigned_user_id=?", (data["userId"],))
-    conn.execute("DELETE FROM user WHERE user_id=?", (data["userId"],))
-    conn.commit()
-    conn.close()
-    return jsonify(1)
-
+    return jsonify({
+        "total": total,
+        "pending": pending,
+        "processing": processing,
+        "finished": finished
+    })
 
 
 if __name__ == "__main__":
     init_db()
     print("=" * 50)
-    print("任务分配管理系统正在启动...")
-    print("请在浏览器中打开: http://localhost:8080")
+    print("Task Management System is starting...")
+    print("Open your browser at: http://localhost:8080")
     print("=" * 50)
     app.run(host="0.0.0.0", port=8080, debug=True)

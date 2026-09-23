@@ -1,40 +1,44 @@
-# 任务管理系统
+# Task Management System
 
-## 项目简介
+## Project Overview
 
-面向企业内部的任务分配与管理系统，支持管理员分配任务、员工查看并更新任务状态。
+A web-based task management system for internal enterprise use. It allows administrators to assign tasks and developers to view and update their own task status. The system supports full CRUD operations for both users and tasks.
 
-## 技术栈
+## Tech Stack
 
-- 后端：Python Flask
-- 数据库：SQLite
-- 前端：HTML + Vue3 + Element Plus（CDN）
+- **Backend:** Python Flask
+- **Database:** SQLite
+- **Frontend:** HTML + Vue3 + Element Plus (via CDN)
+- **HTTP Client:** Axios
+- **Version Control:** Git + GitHub
 
-## 功能列表
+## Features
 
-- 用户登录与角色权限
-- 任务增删改查
-- 任务分配与状态更新
-- 员工管理
-- 数据统计
+### User Management
+- User login with role-based permissions (admin / developer)
+- Full CRUD operations for users (Create, Read, Update, Delete)
+- Role assignment (admin / developer)
+- Admin account protection
 
-## 运行方式
+### Task Management
+- Full CRUD operations for tasks (Create, Read, Update, Delete)
+- Task assignment to developers
+- Task status update (Pending / In Progress / Finished)
+- Real-time statistics dashboard with clickable filter cards
+- Advanced filtering: assignee, status, start date, deadline, keyword
+- Pagination support (5 / 10 / 20 / 50 per page)
 
-1. 安装依赖：`pip install flask flask-cors`
-2. 启动服务：`python app.py`
-3. 浏览器访问：`http://localhost:8080`
+### Developer View
+- Personal task list with filtering and pagination
+- Personal statistics dashboard (only current user's tasks)
+- Task status update
 
-## 默认账号
+### Security & Data
+- Data isolation (developers only see their own tasks)
+- Protected admin account
 
-- 管理员：admin / 123456
-- 开发人员：dev1 / 123456
+## How to Run
 
-
-## 项目结构
-task_system/
-├── app.py
-├── templates/
-│ ├── login.html
-│ ├── admin.html
-│ └── dev.html
-└── README.md
+1. Install dependencies:
+   ```bash
+   pip install flask flask-cors
