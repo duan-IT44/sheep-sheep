@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - Task Management System</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/element-plus"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            background: linear-gradient(135deg, #1F5FBF 0%, #4A90E2 100%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: Arial, sans-serif;
+        }
+        .login-box {
+            width: 400px;
+            background: #fff;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .login-box h2 {
+            text-align: center;
+            color: #1F5FBF;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="login-box">
+            <h2>Task Management System</h2>
+            <el-form :model="form" label-width="100px">
+                <el-form-item label="Username">
+                    <el-input v-model="form.username" placeholder="Enter username"></el-input>
+                </el-form-item>
+                <el-form-item label="Password">
+                    <el-input v-model="form.password" type="password" placeholder="Enter password" show-password></el-input>
+                </el-form-item>
+                <el-form-item>
+                    <el-button type="primary" style="width:100%" @click="login">Login</el-button>
+                </el-form-item>
+            </el-form>
+            <p style="text-align:center;color:#999;font-size:12px;">
+                Default: admin / 123456 &nbsp;|&nbsp; dev1 / 123456
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref } = Vue;
+        const { ElMessage } = ElementPlus;
+
+        createApp({
+            setup() {
+                const form = ref({ username: "", password: "" });
+
+                const login = async () => {
+                    if (!form.value.username || !form.value.password) {
+                        ElMessage.warning("Please enter username and password");
+                        return;
+                    }
+                    try {
+                        const res = await axios.post("/api/user/login", form.value);
+                        if (res.data) {
+                            localStorage.setItem("user", JSON.stringify(res.data));
+                            ElMessage.success("Login successful");
+                            setTimeout(() => {
+                                if (res.data.role === "admin") {
+                                    location.href = "/admin";
+                                } else {
+                                    location.href = "/dev";
+                                }
+                            }, 500);
+                        } else {
+                            ElMessage.error("Wrong username or password");
+                        }
+                    } catch (e) {
+                        ElMessage.error("Server error");
+                    }
+                };
+
+                return { form, login };
+            }
+        }).use(ElementPlus).mount("#app");
+    </script>
+</body>
+</html>
