@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SheepSheep Burger ERP - SD Module (Standalone)</title>
+<style>
+/* ============ SheepSheep Burger ERP - SD Module 独立运行版 ============ */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; background: #f0f2f5; color: #333; }
+
+#loginPage { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+.login-box { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); width: 380px; }
+.login-box h1 { text-align: center; color: #764ba2; margin-bottom: 8px; font-size: 24px; }
+.login-box .subtitle { text-align: center; color: #999; margin-bottom: 30px; font-size: 14px; }
+.login-box input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+.login-box button { width: 100%; padding: 12px; background: #764ba2; color: #fff; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; margin-top: 16px; }
+.login-box button:hover { background: #667eea; }
+.role-demo { margin-top: 20px; padding: 12px; background: #f5f5f5; border-radius: 6px; font-size: 12px; line-height: 1.8; }
+.role-demo b { color: #764ba2; }
+
+#mainApp { display: none; }
+.sidebar { width: 220px; background: #2c3e50; color: #fff; position: fixed; top: 0; left: 0; bottom: 0; padding-top: 20px; overflow-y: auto; }
+.sidebar .logo { text-align: center; font-size: 18px; font-weight: bold; padding: 20px 0; border-bottom: 1px solid #34495e; margin-bottom: 20px; }
+.sidebar .logo span { color: #e74c3c; }
+.sidebar a { display: block; color: #bdc3c7; padding: 12px 24px; text-decoration: none; font-size: 14px; transition: all 0.3s; }
+.sidebar a.active { background: #34495e; color: #fff; border-left: 3px solid #e74c3c; }
+.sidebar .user-info { position: absolute; bottom: 20px; left: 0; right: 0; padding: 16px 24px; border-top: 1px solid #34495e; font-size: 12px; }
+
+.main-content { margin-left: 220px; padding: 24px; }
+.top-bar { background: #fff; padding: 16px 24px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.top-bar h2 { font-size: 20px; color: #2c3e50; }
+.top-bar .logout { color: #e74c3c; cursor: pointer; font-size: 14px; }
+
+.card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 24px; }
+.stat-card { background: #fff; padding: 24px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.stat-card .label { font-size: 13px; color: #999; margin-bottom: 8px; }
+.stat-card .value { font-size: 28px; font-weight: bold; color: #2c3e50; }
+.stat-card.bg-blue { border-top: 4px solid #3498db; }
+.stat-card.bg-green { border-top: 4px solid #27ae60; }
+.stat-card.bg-orange { border-top: 4px solid #f39c12; }
+
+.table-container { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden; }
+.table-header { padding: 16px 24px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+.table-header h3 { font-size: 16px; color: #2c3e50; }
+.btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.btn-primary { background: #3498db; color: #fff; }
+.btn-success { background: #27ae60; color: #fff; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; }
+th { background: #f8f9fa; font-weight: 600; color: #2c3e50; }
+tr:hover { background: #f8f9fa; }
+
+.badge { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 500; }
+.badge-pending { background: #fff3cd; color: #856404; }
+.badge-processing { background: #cce5ff; color: #004085; }
+.badge-completed { background: #d4edda; color: #155724; }
+
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: #fff; border-radius: 8px; width: 500px; max-height: 80vh; overflow-y: auto; padding: 24px; }
+.modal h3 { margin-bottom: 20px; color: #2c3e50; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; margin-bottom: 6px; font-size: 13px; color: #555; }
+.form-group input, .form-group select { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+.modal-footer { margin-top: 20px; text-align: right; }
+.modal-footer button { margin-left: 8px; }
+
+.alert { padding: 12px 16px; border-radius: 4px; margin-bottom: 16px; font-size: 13px; }
+.alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+</style>
+</head>
+<body>
+
+<div id="loginPage">
+  <div class="login-box">
+    <h1>🍔 SheepSheep Burger</h1>
+    <p class="subtitle">SD Module - Sales &amp; Distribution</p>
+    <input type="text" id="loginUser" placeholder="Username" value="admin">
+    <input type="password" id="loginPass" placeholder="Password" value="admin123">
+    <button onclick="login()">Login</button>
+    <div class="role-demo">
+      <b>Demo Accounts:</b><br>
+      admin / admin123 (Admin)<br>
+      manager / manager123 (Store Manager)<br>
+      kitchen / kitchen123 (Kitchen)<br>
+      finance / finance123 (Finance)
+    </div>
+  </div>
+</div>
+
+<div id="mainApp">
+  <div class="sidebar">
+    <div class="logo">🐑 SheepSheep<span> Burger</span></div>
+    <a href="#" class="nav-link active"><span>🛒</span>Sales (SD)</a>
+    <div class="user-info">
+      <div id="currentUser">Admin</div>
+      <div id="currentRole" style="color:#7f8c8d">Administrator</div>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <div class="top-bar">
+      <h2>Sales &amp; Distribution (SD)</h2>
+      <span class="logout" onclick="logout()">Logout →</span>
+    </div>
+
+    <div id="sdAlert"></div>
+
+    <div class="card-grid">
+      <div class="stat-card bg-blue">
+        <div class="label">Total Orders</div>
+        <div class="value" id="statTotalOrders">-</div>
+      </div>
+      <div class="stat-card bg-green">
+        <div class="label">Total Revenue</div>
+        <div class="value" id="statRevenue">-</div>
+      </div>
+      <div class="stat-card bg-orange">
+        <div class="label">Pending Orders</div>
+        <div class="value" id="statPendingOrders">-</div>
+      </div>
+    </div>
+
+    <div class="table-container">
+      <div class="table-header">
+        <h3>Sales Orders (SD)</h3>
+        <button class="btn btn-primary" onclick="openOrderModal()">+ New Order</button>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Order ID</th><th>Customer</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr>
+        </thead>
+        <tbody id="ordersBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Order Modal -->
+<div class="modal-overlay" id="orderModal">
+  <div class="modal">
+    <h3>Create New Sales Order</h3>
+    <div class="form-group">
+      <label>Customer Name</label>
+      <input type="text" id="ordCustomer" placeholder="e.g. Walk-in Customer">
+    </div>
+    <div class="form-group">
+      <label>Channel</label>
+      <select id="ordChannel">
+        <option>Dine-in</option>
+        <option>Takeaway</option>
+        <option>Delivery Platform</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Classic Burger (Qty) - $8.50</label>
+      <input type="number" id="ordClassic" value="1" min="0">
+    </div>
+    <div class="form-group">
+      <label>Cheese Burger (Qty) - $10.50</label>
+      <input type="number" id="ordCheese" value="0" min="0">
+    </div>
+    <div class="form-group">
+      <label>Double Burger (Qty) - $13.50</label>
+      <input type="number" id="ordDouble" value="0" min="0">
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('orderModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="createOrder()">Submit Order</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============ SD Module - Data Layer (独立 localStorage 键) ============
+const DB_KEY = 'sheepsheep_erp_sd';
+
+const PRICES = { classic: 8.5, cheese: 10.5, double: 13.5 };
+
+function getDB() {
+  let db = localStorage.getItem(DB_KEY);
+  if (!db) {
+    db = {
+      users: [
+        { username: 'admin', password: 'admin123', role: 'Administrator', name: 'Admin' },
+        { username: 'manager', password: 'manager123', role: 'Store Manager', name: 'Manager Li' },
+        { username: 'kitchen', password: 'kitchen123', role: 'Kitchen Staff', name: 'Chef Wang' },
+        { username: 'finance', password: 'finance123', role: 'Finance', name: 'Accountant Zhang' }
+      ],
+      orders: [
+        { id: 'ORD-001', customer: 'Walk-in Customer', channel: 'Dine-in', items: { classic: 2, cheese: 1, double: 0 }, total: 28.5, status: 'completed', date: '2026-10-12' },
+        { id: 'ORD-002', customer: 'Meituan Delivery', channel: 'Delivery Platform', items: { classic: 1, cheese: 2, double: 1 }, total: 42.0, status: 'processing', date: '2026-10-12' },
+        { id: 'ORD-003', customer: 'Office Group', channel: 'Takeaway', items: { classic: 5, cheese: 3, double: 2 }, total: 95.5, status: 'pending', date: '2026-10-12' }
+      ],
+      nextOrderId: 4
+    };
+    localStorage.setItem(DB_KEY, JSON.stringify(db));
+    return db; // 首次初始化直接返回对象，避免 JSON.parse(对象) 报错
+  }
+  return JSON.parse(db);
+}
+function saveDB(db) { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+
+// ============ Auth ============
+let currentUser = null;
+
+function login() {
+  const u = document.getElementById('loginUser').value;
+  const p = document.getElementById('loginPass').value;
+  const db = getDB();
+  const user = db.users.find(x => x.username === u && x.password === p);
+  if (user) {
+    currentUser = user;
+    document.getElementById('currentUser').textContent = user.name;
+    document.getElementById('currentRole').textContent = user.role;
+    document.getElementById('loginPage').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'block';
+    renderOrders();
+  } else {
+    alert('Invalid username or password!');
+  }
+}
+
+function logout() {
+  currentUser = null;
+  document.getElementById('mainApp').style.display = 'none';
+  document.getElementById('loginPage').style.display = 'flex';
+}
+
+// ============ Rendering ============
+function renderOrders() {
+  const db = getDB();
+  document.getElementById('ordersBody').innerHTML = db.orders.map(o => `
+    <tr>
+      <td>${o.id}</td><td>${o.customer}<br><small style="color:#999">${o.channel}</small></td>
+      <td>${formatItems(o.items)}</td>
+      <td>$${o.total.toFixed(2)}</td>
+      <td>${statusBadge(o.status)}</td>
+      <td>
+        ${o.status === 'pending' ? `<button class="btn btn-sm btn-success" onclick="approveOrder('${o.id}')">Approve</button>` : ''}
+        ${o.status === 'processing' ? `<button class="btn btn-sm btn-primary" onclick="completeOrder('${o.id}')">Complete</button>` : ''}
+      </td>
+    </tr>`).join('');
+
+  // 统计卡片
+  document.getElementById('statTotalOrders').textContent = db.orders.length;
+  document.getElementById('statRevenue').textContent = '$' + db.orders.reduce((s, o) => s + o.total, 0).toFixed(2);
+  document.getElementById('statPendingOrders').textContent = db.orders.filter(o => o.status === 'pending').length;
+}
+
+// ============ Helpers ============
+function formatItems(items) {
+  const parts = [];
+  if (items.classic) parts.push(`${items.classic}x Classic`);
+  if (items.cheese) parts.push(`${items.cheese}x Cheese`);
+  if (items.double) parts.push(`${items.double}x Double`);
+  return parts.join(', ') || '-';
+}
+
+function statusBadge(status) {
+  const map = { pending: 'badge-pending', processing: 'badge-processing', completed: 'badge-completed' };
+  return `<span class="badge ${map[status] || 'badge-pending'}">${status.charAt(0).toUpperCase() + status.slice(1)}</span>`;
+}
+
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+function openOrderModal() { openModal('orderModal'); }
+
+function showAlert(msg) {
+  document.getElementById('sdAlert').innerHTML = `<div class="alert alert-success">${msg}</div>`;
+  setTimeout(() => { document.getElementById('sdAlert').innerHTML = ''; }, 3000);
+}
+
+// ============ Business Actions ============
+function createOrder() {
+  const db = getDB();
+  const customer = document.getElementById('ordCustomer').value || 'Walk-in';
+  const channel = document.getElementById('ordChannel').value;
+  const classic = parseInt(document.getElementById('ordClassic').value) || 0;
+  const cheese = parseInt(document.getElementById('ordCheese').value) || 0;
+  const double = parseInt(document.getElementById('ordDouble').value) || 0;
+  if (classic + cheese + double === 0) { alert('Please order at least 1 burger!'); return; }
+  const total = classic * PRICES.classic + cheese * PRICES.cheese + double * PRICES.double;
+  const newOrder = {
+    id: 'ORD-' + String(db.nextOrderId++).padStart(3, '0'),
+    customer, channel, items: { classic, cheese, double },
+    total: parseFloat(total.toFixed(2)), status: 'pending', date: new Date().toISOString().slice(0, 10)
+  };
+  db.orders.unshift(newOrder);
+  saveDB(db);
+  closeModal('orderModal');
+  renderOrders();
+  showAlert(`Order ${newOrder.id} created! Total: $${newOrder.total.toFixed(2)}`);
+}
+
+function approveOrder(id) {
+  const db = getDB();
+  const order = db.orders.find(o => o.id === id);
+  if (order) {
+    order.status = 'processing';
+    saveDB(db);
+    renderOrders();
+    showAlert(`Order ${id} approved. Production will be generated in the PP module.`);
+  }
+}
+
+function completeOrder(id) {
+  const db = getDB();
+  const order = db.orders.find(o => o.id === id);
+  if (order) {
+    order.status = 'completed';
+    saveDB(db);
+    renderOrders();
+    showAlert(`Order ${id} completed!`);
+  }
+}
+
+// Init
+getDB();
+</script>
+</body>
+</html>
